@@ -162,8 +162,16 @@ if [ -n "$session_start" ] && [ "$session_start" != "null" ]; then
     fi
 fi
 
+# Claude Code runs this script through `sh -c`. Where /bin/sh is dash
+# (Debian, Ubuntu), sh stays alive, so $PPID is sh and claude is its parent.
+# Where sh execs the command (bash as /bin/sh, macOS), $PPID is claude itself.
 skip_perms=""
-parent_cmd=$(ps -o args= -p "$PPID" 2>/dev/null)
+claude_pid=$PPID
+case "$(ps -o comm= -p "$PPID" 2>/dev/null)" in
+    sh|dash|bash|zsh|*/sh|*/dash|*/bash|*/zsh)
+        claude_pid=$(ps -o ppid= -p "$PPID" 2>/dev/null | tr -d ' ') ;;
+esac
+parent_cmd=$(ps -o args= -p "$claude_pid" 2>/dev/null)
 if [[ "$parent_cmd" == *"--dangerously-skip-permissions"* ]]; then
     skip_perms="⚡  "
 fi
