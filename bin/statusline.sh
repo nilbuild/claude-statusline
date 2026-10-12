@@ -124,10 +124,15 @@ else
     pct_used=0
 fi
 
-effort="default"
-settings_path="$HOME/.claude/settings.json"
-if [ -f "$settings_path" ]; then
-    effort=$(jq -r '.effortLevel // "default"' "$settings_path" 2>/dev/null)
+# Live session effort from stdin (reflects /effort and per-model settings)
+effort=$(echo "$input" | jq -r '.effort.level // empty' 2>/dev/null)
+if [ -z "$effort" ]; then
+    settings_path="$HOME/.claude/settings.json"
+    model_id=$(echo "$input" | jq -r '.model.id // empty')
+    if [ -f "$settings_path" ]; then
+        effort=$(jq -r --arg m "$model_id" '.modelSettings[$m].effortLevel // .effortLevel // "default"' "$settings_path" 2>/dev/null)
+    fi
+    [ -z "$effort" ] && effort="default"
 fi
 
 # ── LINE 1: Model │ Context % │ Directory (branch) │ Session │ Effort ──
@@ -182,6 +187,8 @@ if [ -n "$session_duration" ]; then
 fi
 line1+="${sep}"
 case "$effort" in
+    max)    line1+="${magenta}◉ ${effort}${reset}" ;;
+    xhigh)  line1+="${magenta}● ${effort}${reset}" ;;
     high)   line1+="${magenta}● ${effort}${reset}" ;;
     medium) line1+="${dim}◑ ${effort}${reset}" ;;
     low)    line1+="${dim}◔ ${effort}${reset}" ;;
