@@ -144,19 +144,26 @@ function run() {
     }
   }
 
+  // refreshInterval keeps the rate limits moving while the main session is
+  // idle, e.g. while it waits on subagents; events alone stop firing then.
   const statusLineConfig = {
     type: "command",
     command: 'bash "$HOME/.claude/statusline.sh"',
+    refreshInterval: 30,
   };
 
-  if (
-    settings.statusLine &&
-    settings.statusLine.type === "command" &&
-    settings.statusLine.command === statusLineConfig.command
-  ) {
+  const current = settings.statusLine || {};
+  const sameCommand =
+    current.type === "command" && current.command === statusLineConfig.command;
+
+  if (sameCommand && current.refreshInterval !== undefined) {
     success("Settings already configured");
   } else {
-    settings.statusLine = statusLineConfig;
+    // An existing entry for this script keeps its other fields (padding and
+    // the like); only the missing refreshInterval is added.
+    settings.statusLine = sameCommand
+      ? { ...current, refreshInterval: statusLineConfig.refreshInterval }
+      : statusLineConfig;
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + "\n");
     success(`Updated ${dim}settings.json${reset} with statusLine config`);
   }
