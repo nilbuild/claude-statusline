@@ -310,6 +310,17 @@ if [ -n "$seven_day_pct" ]; then
     [ -n "$rate_lines" ] && rate_lines+="\n"
     rate_lines+="${white}weekly${reset}  ${seven_day_bar} ${seven_day_pct_color}${seven_day_pct_fmt}%${reset}"
     [ -n "$seven_day_reset" ] && rate_lines+=" ${dim}⟳${reset} ${white}${seven_day_reset}${reset}"
+
+    # Daily budget: remaining weekly limit spread over the days left until reset
+    # (the current day counts as a full day)
+    if [ -n "$seven_day_reset_epoch" ] && [ "$seven_day_reset_epoch" != "null" ]; then
+        secs_left=$(( seven_day_reset_epoch - $(date +%s) ))
+        if [ "$secs_left" -gt 0 ]; then
+            days_left=$(( (secs_left + 86399) / 86400 ))
+            daily_pct=$(awk -v r="$(( 100 - seven_day_pct ))" -v d="$days_left" 'BEGIN {v = r / d; if (v < 0) v = 0; printf "%.0f", v}')
+            rate_lines+=" ${dim}(${daily_pct}%/day)${reset}"
+        fi
+    fi
 fi
 
 if [ "$extra_enabled" = "true" ] && [ -n "$usage_data" ]; then
