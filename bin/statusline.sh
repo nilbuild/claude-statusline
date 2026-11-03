@@ -125,10 +125,14 @@ else
 fi
 
 effort="default"
-settings_path="$HOME/.claude/settings.json"
+claude_config_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+settings_path="$claude_config_dir/settings.json"
 if [ -f "$settings_path" ]; then
     effort=$(jq -r '.effortLevel // "default"' "$settings_path" 2>/dev/null)
 fi
+# Prefer the session's effort level (stdin) over the settings.json default
+stdin_effort=$(echo "$input" | jq -r '.effort.level // empty')
+[ -n "$stdin_effort" ] && effort="$stdin_effort"
 
 # ── LINE 1: Model │ Context % │ Directory (branch) │ Session │ Effort ──
 pct_color=$(color_for_pct "$pct_used")
@@ -182,7 +186,7 @@ if [ -n "$session_duration" ]; then
 fi
 line1+="${sep}"
 case "$effort" in
-    high)   line1+="${magenta}● ${effort}${reset}" ;;
+    high|xhigh|max) line1+="${magenta}● ${effort}${reset}" ;;
     medium) line1+="${dim}◑ ${effort}${reset}" ;;
     low)    line1+="${dim}◔ ${effort}${reset}" ;;
     *)      line1+="${dim}◑ ${effort}${reset}" ;;
@@ -195,17 +199,19 @@ five_hour_reset_epoch=""
 seven_day_pct=""
 seven_day_reset_epoch=""
 
-stdin_five_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
-if [ -n "$stdin_five_pct" ]; then
+# rate_limits may contain only one window (e.g. seven_day without five_hour);
+# any window present means stdin data is available, so skip the API call
+if echo "$input" | jq -e '.rate_limits | objects | (.five_hour // .seven_day)' >/dev/null 2>&1; then
     has_stdin_rates=true
-    five_hour_pct=$(printf "%.0f" "$stdin_five_pct")
+    # awk instead of printf: printf "%.0f" fails on locales with a comma decimal separator
+    five_hour_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty' | awk '{printf "%.0f", $1}')
     five_hour_reset_epoch=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
     seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' | awk '{printf "%.0f", $1}')
     seven_day_reset_epoch=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
 fi
 
 # ── Fallback: API call (cached) ────────────────────────
-cache_file="/tmp/claude/statusline-usage-cache.json"
+cache_file="/tmp/claude/statusline-usage-cache-$(basename "$claude_config_dir").json"
 cache_max_age=60
 mkdir -p /tmp/claude
 
@@ -236,7 +242,7 @@ if ! $has_stdin_rates; then
             fi
         fi
         if [ -z "$token" ] || [ "$token" = "null" ]; then
-            creds_file="${HOME}/.claude/.credentials.json"
+            creds_file="$claude_config_dir/.credentials.json"
             if [ -f "$creds_file" ]; then
                 token=$(jq -r '.claudeAiOauth.accessToken // empty' "$creds_file" 2>/dev/null)
             fi
