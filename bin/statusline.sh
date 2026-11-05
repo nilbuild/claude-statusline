@@ -124,9 +124,10 @@ else
     pct_used=0
 fi
 
-effort="default"
+effort=$(echo "$input" | jq -r '.effort.level // .effort // empty' 2>/dev/null)
+[ -z "$effort" ] && effort="$CLAUDE_EFFORT"
 settings_path="$HOME/.claude/settings.json"
-if [ -f "$settings_path" ]; then
+if [ -z "$effort" ] && [ -f "$settings_path" ]; then
     effort=$(jq -r '.effortLevel // "default"' "$settings_path" 2>/dev/null)
 fi
 
@@ -182,7 +183,7 @@ if [ -n "$session_duration" ]; then
 fi
 line1+="${sep}"
 case "$effort" in
-    high)   line1+="${magenta}● ${effort}${reset}" ;;
+    max|xhigh|high) line1+="${magenta}● ${effort}${reset}" ;;
     medium) line1+="${dim}◑ ${effort}${reset}" ;;
     low)    line1+="${dim}◔ ${effort}${reset}" ;;
     *)      line1+="${dim}◑ ${effort}${reset}" ;;
