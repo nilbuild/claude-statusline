@@ -197,16 +197,21 @@ seven_day_pct=""
 seven_day_reset_epoch=""
 
 stdin_five_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
+stdin_seven_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 if [ -n "$stdin_five_pct" ]; then
     has_stdin_rates=true
     five_hour_pct=$(printf "%.0f" "$stdin_five_pct")
     five_hour_reset_epoch=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
-    seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' | awk '{printf "%.0f", $1}')
+fi
+if [ -n "$stdin_seven_pct" ]; then
+    has_stdin_rates=true
+    seven_day_pct=$(printf "%.0f" "$stdin_seven_pct")
     seven_day_reset_epoch=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
 fi
 
 # ── Fallback: API call (cached) ────────────────────────
 cache_file="/tmp/claude/statusline-usage-cache.json"
+attempt_file="/tmp/claude/statusline-usage-attempt"
 cache_max_age=60
 mkdir -p /tmp/claude
 
@@ -216,13 +221,13 @@ extra_enabled="false"
 if ! $has_stdin_rates; then
     needs_refresh=true
 
-    if [ -f "$cache_file" ]; then
-        cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
+    if [ -f "$attempt_file" ]; then
+        attempt_mtime=$(stat -c %Y "$attempt_file" 2>/dev/null || stat -f %m "$attempt_file" 2>/dev/null)
         now=$(date +%s)
-        cache_age=$(( now - cache_mtime ))
-        if [ "$cache_age" -lt "$cache_max_age" ]; then
+        attempt_age=$(( now - attempt_mtime ))
+        if [ "$attempt_age" -lt "$cache_max_age" ]; then
             needs_refresh=false
-            usage_data=$(cat "$cache_file" 2>/dev/null)
+            [ -f "$cache_file" ] && usage_data=$(cat "$cache_file" 2>/dev/null)
         fi
     fi
 
@@ -252,6 +257,7 @@ if ! $has_stdin_rates; then
         fi
 
         if [ -n "$token" ] && [ "$token" != "null" ]; then
+            touch "$attempt_file"
             response=$(curl -s --max-time 5 \
                 -H "Accept: application/json" \
                 -H "Content-Type: application/json" \
